@@ -32,16 +32,16 @@ Repositori ini berisi skrip instalasi K3s multi-distro dan manifes Kubernetes ya
 | Fedora | Fedora | 36+ |
 | SUSE | openSUSE Leap | 15.4 |
 | | SLES | 15 SP4 |
-| Arch | Arch Linux / Manjaro | rolling |
+| Arch | Arch Linux / Manjaro | Rolling |
 | Alpine | Alpine Linux | 3.17+ |
 
 ### Spesifikasi Hardware Minimum
 
 | Komponen | Server Node | Agent Node |
 |---|---|---|
-| **CPU** | 2 core (x86_64, arm64, armv7l) | 1 core |
-| **RAM** | 1 GB | 512 MB |
-| **Disk** | 10 GB (SSD direkomendasikan) | 5 GB |
+| CPU | 2 core (x86_64, arm64, armv7l) | 1 core |
+| RAM | 1 GB | 512 MB |
+| Disk | 10 GB (SSD direkomendasikan) | 5 GB |
 
 ### Port Jaringan yang Diperlukan
 
@@ -55,11 +55,12 @@ Port berikut harus dapat diakses antar node dalam kluster:
 | `51820` | UDP | Server ↔ Agent | WireGuard (opsional, jika diaktifkan) |
 | `2379-2380` | TCP | Server ↔ Server | etcd (hanya multi-server HA mode) |
 
-> **Catatan:** K3s menggunakan Flannel sebagai CNI default dengan transport VXLAN (UDP 8472). Port `6443/TCP` adalah satu-satunya port yang perlu diekspos ke client eksternal (kubectl).
+> Catatan: K3s menggunakan Flannel sebagai CNI default dengan transport VXLAN (UDP 8472). Port `6443/TCP` adalah satu-satunya port yang perlu diekspos ke client eksternal (kubectl).
 
 ### Dependensi yang Dipasang Otomatis
 
 Skrip `install-k3s.sh` akan menginstal dependensi berikut jika belum tersedia:
+
 - `curl` — mengunduh K3s installer
 - `iptables` — manajemen firewall rules
 
@@ -89,7 +90,7 @@ k3s-kustomize-ops/
 
 ## Arsitektur Kustomize
 
-Kustomize bekerja dengan prinsip **patching tanpa templating**. Berbeda dengan Helm yang menggunakan template engine (`{{ .Values.replicas }}`), Kustomize melakukan *strategic merge patch* — yaitu menggabungkan (merge) dua dokumen YAML berdasarkan key yang sama.
+Kustomize bekerja dengan prinsip patching tanpa templating. Berbeda dengan Helm yang menggunakan template engine (`{{ .Values.replicas }}`), Kustomize melakukan *strategic merge patch* — yaitu menggabungkan dua dokumen YAML berdasarkan key yang sama.
 
 ### Bagaimana Overlay Bekerja
 
@@ -99,25 +100,25 @@ kustomize/base/deployment.yaml        kustomize/overlays/prod/kustomization.yaml
 spec:                                 patches:
   replicas: 1            ──────────►    - patch: |-
   containers:              (merge)           spec:
-    - resources:                              replicas: 3   ← override
+    - resources:                              replicas: 3   <-- override
         limits:                               containers:
           memory: "256Mi"                       - resources:
                                                     limits:
-                                                      memory: "512Mi"  ← override
+                                                      memory: "512Mi"  <-- override
 
                         Output Akhir (kubectl apply):
                         ─────────────────────────────
                         spec:
-                          replicas: 3          ← dari prod overlay
+                          replicas: 3          <-- dari prod overlay
                           containers:
                             - resources:
                                 limits:
-                                  memory: "512Mi"  ← dari prod overlay
+                                  memory: "512Mi"  <-- dari prod overlay
 ```
 
 ### Pratinjau Output Kustomize
 
-Sebelum `kubectl apply`, selalu pratinjau manifes yang akan diterapkan:
+Selalu pratinjau manifes sebelum menjalankan `kubectl apply`:
 
 ```bash
 # Pratinjau manifes yang akan di-deploy ke dev
@@ -137,7 +138,7 @@ kubectl diff -k kustomize/overlays/prod/
 
 ## Instalasi K3s
 
-### Penggunaan Dasar
+### Persiapan Awal
 
 ```bash
 # Clone repositori
@@ -162,12 +163,12 @@ sudo ./scripts/install-k3s.sh \
   --ingress nginx \
   --tls-san 192.168.1.10,k3s.example.com
 
-# Menonaktifkan komponen bawaan selain Traefik
+# Menonaktifkan komponen bawaan tertentu
 sudo ./scripts/install-k3s.sh \
   --disable servicelb,local-storage \
   --ingress nginx
 
-# Dry-run: lihat perintah tanpa mengeksekusi
+# Dry-run: tampilkan konfigurasi tanpa mengeksekusi
 sudo ./scripts/install-k3s.sh --ingress nginx --dry-run
 ```
 
@@ -186,7 +187,7 @@ sudo ./scripts/install-k3s.sh \
   --token <TOKEN_DARI_SERVER>
 ```
 
-### Opsi Lengkap
+### Referensi Opsi Lengkap
 
 ```
 Opsi:
@@ -237,7 +238,7 @@ Edit field `newTag` di `kustomize/overlays/prod/kustomization.yaml`:
 ```yaml
 images:
   - name: myapp
-    newTag: "1.1.0"   # Update versi di sini
+    newTag: "1.1.0"   # Perbarui versi di sini
 ```
 
 Kemudian apply ulang:
@@ -250,7 +251,7 @@ kubectl apply -k kustomize/overlays/prod/
 
 ## Verifikasi Kluster
 
-Jalankan perintah berikut setelah instalasi selesai untuk memverifikasi kluster berjalan dengan benar:
+Jalankan perintah berikut setelah instalasi selesai untuk memastikan kluster berjalan dengan benar:
 
 ```bash
 # Periksa status semua node
@@ -321,7 +322,7 @@ kubectl get nodes
 ### Lokasi Log K3s
 
 ```bash
-# Log service K3s (cara utama — real-time)
+# Log service K3s (real-time)
 sudo journalctl -u k3s -f
 
 # Log agent K3s
@@ -332,7 +333,7 @@ sudo tail -f /var/log/syslog           # Debian/Ubuntu
 sudo tail -f /var/log/messages         # RHEL/CentOS/Fedora
 sudo journalctl -xeu k3s --no-pager    # Semua distro systemd (verbose)
 
-# Log K3s yang disimpan ke file
+# Log pod dan container
 ls /var/log/pods/
 ls /var/log/containers/
 ```
@@ -340,6 +341,7 @@ ls /var/log/containers/
 ### Masalah Umum
 
 **Node tidak muncul di `kubectl get nodes`:**
+
 ```bash
 # Periksa konektivitas ke API server dari agent
 curl -k https://<SERVER_IP>:6443/readyz
@@ -352,6 +354,7 @@ nc -zv <SERVER_IP> 6443
 ```
 
 **Pod stuck di `ContainerCreating` atau `Pending`:**
+
 ```bash
 # Lihat detail pod
 kubectl describe pod <POD_NAME> -n <NAMESPACE>
@@ -360,7 +363,8 @@ kubectl describe pod <POD_NAME> -n <NAMESPACE>
 kubectl get events -n <NAMESPACE> --sort-by='.lastTimestamp'
 ```
 
-**Flannel tidak bisa komunikasi antar node:**
+**Flannel tidak bisa berkomunikasi antar node:**
+
 ```bash
 # Verifikasi port UDP 8472 tidak diblokir
 sudo tcpdump -i any udp port 8472
@@ -370,6 +374,7 @@ ip addr show flannel.1
 ```
 
 **K3s gagal start setelah reboot:**
+
 ```bash
 # Periksa status service
 sudo systemctl status k3s
@@ -377,7 +382,7 @@ sudo systemctl status k3s
 # Lihat log error terakhir
 sudo journalctl -u k3s -n 100 --no-pager
 
-# Restart service manual
+# Restart service secara manual
 sudo systemctl restart k3s
 ```
 
@@ -390,12 +395,14 @@ k3s --version
 # Status komponen internal kluster
 kubectl get componentstatuses 2>/dev/null || kubectl get cs
 
-# Kapasitas dan alokasi resource per node
-kubectl top nodes   # Memerlukan metrics-server aktif
+# Kapasitas dan alokasi resource per node (memerlukan metrics-server aktif)
+kubectl top nodes
 
-# Log container spesifik
-kubectl logs <POD_NAME> -n <NAMESPACE> --previous   # Log container yang crash
-kubectl logs <POD_NAME> -n <NAMESPACE> -f           # Tail live log
+# Log container yang crash
+kubectl logs <POD_NAME> -n <NAMESPACE> --previous
+
+# Tail live log container
+kubectl logs <POD_NAME> -n <NAMESPACE> -f
 ```
 
 ---
@@ -405,7 +412,7 @@ kubectl logs <POD_NAME> -n <NAMESPACE> -f           # Tail live log
 ### Uninstal Standar (mempertahankan data)
 
 ```bash
-# Uninstal dengan autodetect role
+# Uninstal dengan deteksi role otomatis
 sudo ./scripts/uninstall-k3s.sh
 
 # Uninstal role spesifik
@@ -413,14 +420,14 @@ sudo ./scripts/uninstall-k3s.sh --role server
 sudo ./scripts/uninstall-k3s.sh --role agent
 ```
 
-### Uninstal + Hapus Semua Data (Destructive)
+### Uninstal Beserta Seluruh Data
 
 ```bash
-# --purge menghapus /var/lib/rancher/k3s, volumes, kubeconfig
+# --purge menghapus /var/lib/rancher/k3s, volumes, dan kubeconfig
 sudo ./scripts/uninstall-k3s.sh --purge --yes
 ```
 
-> **Peringatan:** Flag `--purge` bersifat **tidak dapat dibalik**. Semua data persistent termasuk PersistentVolumes lokal akan dihapus permanen.
+> Peringatan: Flag `--purge` tidak dapat dibalik. Semua data persistent termasuk PersistentVolumes lokal akan dihapus secara permanen.
 
 ---
 
