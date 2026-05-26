@@ -1,0 +1,73 @@
+# kustomize/overlays/dev/kustomization.yaml
+# Overlay untuk lingkungan DEVELOPMENT.
+# Prioritas: resource ringan, debugging mudah, toleransi error tinggi.
+#
+# Cara apply:
+#   kubectl apply -k kustomize/overlays/dev/
+#   # atau dry-run:
+#   kubectl apply -k kustomize/overlays/dev/ --dry-run=client
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Namespace khusus untuk environment dev
+namespace: dev
+
+# Label tambahan untuk semua resource di overlay ini
+commonLabels:
+  environment: dev
+
+commonAnnotations:
+  deployment.kubernetes.io/environment: development
+
+# Referensi ke base (relative path)
+resources:
+  - ../../base
+
+# Override tag image untuk dev — gunakan image 'develop' atau branch tertentu
+images:
+  - name: myapp
+    newTag: "develop"
+
+# Strategic Merge Patch: patch sebagian dari resource tanpa menulis ulang seluruhnya.
+# Hanya field yang didefinisikan di sini yang akan di-override; sisanya dari base tetap.
+patches:
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: myapp
+      spec:
+        # 1 replica cukup untuk dev — hemat resource
+        replicas: 1
+        template:
+          spec:
+            containers:
+              - name: myapp
+                # Resource minimal untuk dev
+                resources:
+                  requests:
+                    cpu: "25m"
+                    memory: "32Mi"
+                  limits:
+                    cpu: "100m"
+                    memory: "128Mi"
+                # Override APP_ENV ke 'development'
+                env:
+                  - name: APP_ENV
+                    value: "development"
+                  - name: LOG_LEVEL
+                    value: "debug"    # Level log verbose untuk debugging
+                # Matikan readOnlyRootFilesystem di dev agar mudah debug
+                securityContext:
+                  readOnlyRootFilesystem: false
+    target:
+      kind: Deployment
+      name: myapp
+
+# ConfigMap Generator: buat ConfigMap dari literal atau file
+# configMapGenerator:
+#   - name: myapp-config
+#     literals:
+#       - DB_HOST=postgres-dev.dev.svc.cluster.local
+#       - CACHE_TTL=60

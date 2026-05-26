@@ -1,0 +1,137 @@
+# kustomize/overlays/prod/kustomization.yaml
+# Overlay untuk lingkungan PRODUCTION.
+# Prioritas: ketersediaan tinggi (HA), resource yang memadai, keamanan ketat.
+#
+# Cara apply:
+#   kubectl apply -k kustomize/overlays/prod/
+#   # Pratinjau perubahan sebelum apply:
+#   kubectl diff -k kustomize/overlays/prod/
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Namespace khusus untuk production
+namespace: production
+
+# Label tambahan untuk semua resource di overlay ini
+commonLabels:
+  environment: production
+
+commonAnnotations:
+  deployment.kubernetes.io/environment: production
+  # Anotasi untuk monitoring (contoh: Prometheus scraping)
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8080"
+  prometheus.io/path: "/metrics"
+
+# Referensi ke base
+resources:
+  - ../../base
+
+# Pin image ke digest SHA256 spesifik untuk keamanan dan reprodusibilitas.
+# Ganti tag dan digest sesuai rilis production terbaru.
+images:
+  - name: myapp
+    newName: registry.example.com/myapp   # Registry private (opsional)
+    newTag: "1.0.0"
+    # digest: sha256:abc123...            # Uncomment untuk pin ke digest
+
+# Patches menggunakan Strategic Merge Patch
+patches:
+
+  # --- Patch 1: Skalabilitas & Resource Production ---
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: myapp
+      spec:
+        # Minimal 3 replicas untuk High Availability di production
+        replicas: 3
+        template:
+          spec:
+            containers:
+              - name: myapp
+                # Resource production — disesuaikan dengan profil beban aktual
+                resources:
+                  requests:
+                    cpu: "250m"
+                    memory: "256Mi"
+                  limits:
+                    cpu: "1000m"      # 1 CPU core maksimum
+                    memory: "512Mi"
+                # Environment production
+                env:
+                  - name: APP_ENV
+                    value: "production"
+                  - name: LOG_LEVEL
+                    value: "warn"     # Kurangi noise log di production
+                # Keamanan penuh aktif di production
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  readOnlyRootFilesystem: true
+                  capabilities:
+                    drop:
+                      - ALL
+    target:
+      kind: Deployment
+      name: myapp
+
+  # --- Patch 2: Probe lebih konservatif untuk production ---
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: myapp
+      spec:
+        template:
+          spec:
+            containers:
+              - name: myapp
+                livenessProbe:
+                  initialDelaySeconds: 30   # Lebih panjang untuk app besar
+                  periodSeconds: 30
+                  failureThreshold: 5       # Lebih toleran sebelum restart
+                readinessProbe:
+                  initialDelaySeconds: 10
+                  periodSeconds: 15
+                  failureThreshold: 3
+    target:
+      kind: Deployment
+      name: myapp
+
+  # --- Patch 3: Graceful shutdown lebih panjang ---
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: myapp
+      spec:
+        template:
+          spec:
+            terminationGracePeriodSeconds: 60
+    target:
+      kind: Deployment
+      name: myapp
+
+# PodDisruptionBudget memastikan minimal 2 pod tersedia saat operasi
+# maintenance (node drain, rolling update)
+# Uncomment setelah namespace production dibuat
+# resources:
+#   - ../../base
+#   - pdb.yaml    # Buat file pdb.yaml terpisah
+
+# ConfigMap Generator untuk production
+# configMapGenerator:
+#   - name: myapp-config
+#     literals:
+#       - DB_HOST=postgres.production.svc.cluster.local
+#       - CACHE_TTL=300
+#       - MAX_CONNECTIONS=100
+
+# Secret Generator — JANGAN hardcode secret di sini!
+# Gunakan External Secrets Operator atau Vault untuk production.
+# secretGenerator:
+#   - name: myapp-secret
+#     envs:
+#       - .env.prod  # File .env TIDAK di-commit ke Git

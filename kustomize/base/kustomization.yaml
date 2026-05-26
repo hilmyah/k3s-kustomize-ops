@@ -1,0 +1,19 @@
+# kustomize/base/kustomization.yaml
+# Titik masuk Kustomize untuk manifes dasar (environment-agnostic).
+# Overlay (dev/prod) akan merujuk ke direktori ini dan menerapkan patch.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Label dan anotasi yang diterapkan ke SEMUA resource di base ini
+commonLabels:
+  app.kubernetes.io/managed-by: kustomize
+  app.kubernetes.io/part-of: myapp
+
+commonAnnotations:
+  kustomize.io/origin: base
+
+# Daftar resource yang dikelola oleh base ini
+resources:
+  - deployment.yaml
+  - service.yaml

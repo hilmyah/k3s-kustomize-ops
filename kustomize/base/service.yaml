@@ -1,0 +1,31 @@
+# kustomize/base/service.yaml
+# Manifes Service dasar yang mengekspos Deployment ke dalam kluster.
+# Type ClusterIP dipilih sebagai default aman — akses dari luar kluster
+# dilakukan melalui Ingress, bukan NodePort/LoadBalancer langsung.
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: myapp
+  labels:
+    app.kubernetes.io/name: myapp
+    app.kubernetes.io/component: backend
+spec:
+  # ClusterIP: hanya accessible dari dalam kluster (via Ingress)
+  # Override ke NodePort/LoadBalancer di overlay jika diperlukan
+  type: ClusterIP
+
+  selector:
+    app.kubernetes.io/name: myapp
+
+  ports:
+    - name: http
+      port: 80
+      targetPort: http   # Merujuk ke nama port di container (port 8080)
+      protocol: TCP
+
+  # Session affinity (opsional, aktifkan untuk stateful apps)
+  # sessionAffinity: ClientIP
+  # sessionAffinityConfig:
+  #   clientIP:
+  #     timeoutSeconds: 3600

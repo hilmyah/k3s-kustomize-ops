@@ -1,0 +1,139 @@
+# kustomize/base/deployment.yaml
+# Manifes Deployment dasar (statis/absolut).
+# Nilai di sini adalah MINIMUM untuk berjalan — overlay bertanggung jawab
+# menyesuaikan replicas, resource limits, dan environment-specific config.
+#
+# Catatan Kustomize:
+#   - Jangan gunakan Helm templating ({{ }}) di sini.
+#   - Perubahan per-environment dilakukan melalui strategic merge patch
+#     atau JSON 6902 patch di direktori overlays/.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myapp
+  labels:
+    app.kubernetes.io/name: myapp
+    app.kubernetes.io/component: backend
+spec:
+  # Jumlah replicas MINIMUM — override di overlay prod/dev
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: myapp
+
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: myapp
+        app.kubernetes.io/component: backend
+      annotations:
+        # Paksa rollout saat ConfigMap/Secret berubah (isi hash di pipeline CI)
+        checksum/config: "placeholder"
+    spec:
+      # Toleransi untuk node dengan taint (opsional, sesuaikan kebutuhan)
+      # tolerations:
+      #   - key: "node-role.kubernetes.io/master"
+      #     operator: "Exists"
+      #     effect: "NoSchedule"
+
+      # Pastikan pods tidak semua dijadwalkan di satu node
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: myapp
+                topologyKey: kubernetes.io/hostname
+
+      # Security context di level pod (non-root)
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+
+      containers:
+        - name: myapp
+          # Image tanpa tag spesifik — override di overlay menggunakan
+          # `images:` field pada kustomization.yaml
+          image: myapp:latest
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+
+          # Resource requests & limits MINIMUM (base)
+          # Override di overlay prod dengan nilai lebih tinggi
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+
+          # Environment variables dasar
+          # Nilai sensitif HARUS menggunakan secretKeyRef, bukan value langsung
+          env:
+            - name: APP_ENV
+              value: "base"          # Di-override di overlay
+            - name: APP_PORT
+              value: "8080"
+            - name: LOG_LEVEL
+              value: "info"
+
+          # Contoh penggunaan ConfigMap sebagai env source
+          # envFrom:
+          #   - configMapRef:
+          #       name: myapp-config
+
+          # Liveness probe — restart container jika tidak responsif
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            failureThreshold: 3
+            timeoutSeconds: 5
+
+          # Readiness probe — hapus dari Service endpoint jika tidak siap
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 3
+
+          # Security context di level container
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+
+          # Volume mount untuk direktori tmp (karena readOnlyRootFilesystem: true)
+          volumeMounts:
+            - name: tmp-dir
+              mountPath: /tmp
+
+      volumes:
+        - name: tmp-dir
+          emptyDir: {}
+
+      # Graceful shutdown
+      terminationGracePeriodSeconds: 30
